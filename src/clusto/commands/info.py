@@ -38,32 +38,49 @@ class Info(script_helper.Script):
         script_helper.Script.__init__(self)
 
     def format_line(self, key, value, pad=20):
-        if value:
-            if isinstance(value, list):
-                value = ', '.join(value)
-            key += ':'
-            print key.ljust(pad, ' '), value
+        if not value:
+            value = ''
+        if isinstance(value, list):
+            value = ', '.join(value)
+        key += ':'
+        print key.ljust(pad, ' '), value
 
-    def print_summary(self, items):
+    def print_summary(self, items, objs):
         self.debug('Printing with format=summary')
-        for item in items:
-            self.format_line('Name', item.pop('name'))
-            self.format_line('Type', item.pop('type'))
-            if 'ip' in item.keys():
-                self.format_line('IP', item.pop('ip'))
-            self.format_line('Description', item.pop('description'))
-            if 'parents' in item.keys():
-                self.format_line('Parents', item.pop('parents'))
-            if 'contents' in item.keys():
-                self.format_line('Contents', item.pop('contents'))
+        for obj in objs:
+            self.format_line('Name', obj.name)
+            self.format_line('Type', obj.type)
+            ip = IPManager.get_ips(obj)
+            if ip:
+                self.format_line('IP', ip)
+            parents = obj.parents()
+            if parents:
+                self.format_line('Parents', [x.name for x in parents])
+            contents = obj.contents()
+            if contents:
+                self.format_line('Contents', [x.name for x in contents])
+            if obj.type != 'server':
+                continue
             print '\n'
-            keys = sorted(item.keys())
-            for k in keys:
-                self.format_line(k.capitalize(), item[k])
-            print '-' * 80
+            
+            memory = obj.attr_value(key='system', subkey='memory')
+            if memory:
+                self.format_line('Memory', '%i GB' % memory / 1024)
+            disk = obj.attr_value(key='system', subkey='disk')
+            if disk:
+                self.format_line('Disk', '%i GB (%i)' % (disk,
+                    len(obj.attrs(key='disk', subkey='size'))))
+            cpucount = obj.attr_value(key='system', subkey='cpucount')
+            if cpucount:
+                self.format_line('CPU Cores', cpucount)
+            desc = obj.attr_values(key='description')
+            if desc:
+                format_line('\n                    '.join(desc))
+            ifaces = [('nic-eth(%i)' % x.number).ljust(20, ' ') + ' %s = %s' % (x.subkey, x.value) for x in obj.attrs(key='port-nic-eth') if x.subkey.find('mac') != -1]
+            if ifaces:
+                print '\n'.join(ifaces)
 
-
-    def print_oneline(self, items):
+    def print_oneline(self, items, obj=None):
         self.debug('Printing with format=oneline')
         for item in items:
             line = '%s(%s);' % (item.pop('name'), item.pop('type'))
@@ -79,11 +96,11 @@ class Info(script_helper.Script):
                 line += '%s=%s;' % (k, item[k])
             print line
 
-    def print_json(self, items):
+    def print_json(self, items, obj=None):
         self.debug('Printing with format=json')
         print json.dumps(items, sort_keys=True, indent=2)
 
-    def print_yaml(self, items):
+    def print_yaml(self, items, obj=None):
         self.debug('Printing with format=yaml')
         print yaml.safe_dump(items, encoding='utf-8',
             explicit_start=True, default_flow_style=False)
@@ -93,6 +110,7 @@ class Info(script_helper.Script):
             print 'You need to provide at least one item. Use --help'
             return 0
         item_list = []
+        obj_list = []
         self.debug('Fetching the list of items: %s' % ','.join(args.items))
         for item in args.items:
             obj = clusto.get(item)
@@ -100,6 +118,7 @@ class Info(script_helper.Script):
                 self.warn("The item %s couldn't be found" % item)
                 continue
             obj = obj[0]
+            obj_list.append(obj)
             self.debug('Object found! %s' % obj)
             item_attrs = {
                 'name': obj.name,
@@ -133,7 +152,7 @@ class Info(script_helper.Script):
                 for value in values:
                     item_attrs['mac%d' % value.number] = value.value
             item_list.append(item_attrs)
-        getattr(self, 'print_%s' % args.format)(item_list)
+        getattr(self, 'print_%s' % args.format)(item_list, obj_list)
 
     def _add_arguments(self, parser):
         choices = ['summary', 'oneline']

@@ -211,6 +211,25 @@ def load_config(filename=None, dsn=None, logger=None):
 
     return config
 
+
+def init_script():
+    '''
+    Initialize the clusto environment for clusto scripts.
+
+    Connects to the clusto database, returns a python SafeConfigParser
+    '''
+
+    if 'CLUSTOCONFIG' in os.environ:
+        filename = os.environ['CLUSTOCONFIG']
+    else:
+        filename = '/etc/clusto/clusto.conf'
+
+    config = load_config(filename)
+    config = dict(config.items('clusto'))
+    clusto.connect(config)
+    return config
+
+
 def demodule(module):
     '''
     Returns a class out of a given module name by doing:
@@ -300,7 +319,6 @@ def main():
     except Exception as e:
         log.error(str(e))
         return 99
-
 
 if __name__ == '__main__':
     sys.exit(main())

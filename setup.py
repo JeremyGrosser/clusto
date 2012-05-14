@@ -46,6 +46,7 @@ setuptools.setup(
     zip_safe = False,
     package_dir = { '': 'src' },
     scripts = [
+        os.path.join(srcdir, 'scripts', 'clusto-create'),
         os.path.join(srcdir, 'scripts', 'clusto-tree'),
         os.path.join(srcdir, 'scripts', 'clusto-update-info'),
         os.path.join(srcdir, 'scripts', 'clusto-update-db'),

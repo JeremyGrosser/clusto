@@ -45,6 +45,28 @@ def connect(config, echo=False):
         SESSION.memcache = None
 
 
+def init_script(**kwargs):
+    config = {}
+
+    path = os.environ.get('CLUSTOCONFIG', '/etc/clusto/clusto.conf')
+    if os.path.exists(path):
+        p = ConfigParser.SafeConfigParser()
+        p.readfp(open(path, 'r'))
+        if p.has_section('clusto'):
+            config.update(dict(p.items('clusto')))
+
+    if 'CLUSTODSN' in os.environ:
+        config['dsn'] = os.environ['CLUSTODSN']
+    if 'CLUSTOPLUGINS' in os.environ:
+        config['plugins'] = os.environ['CLUSTOPLUGINS']
+    config.update(kwargs)
+
+    if 'plugins' in config:
+        for plugin in config['plugins'].split(','):
+            module = __import__(plugin)
+    return connect(config)
+
+
 def checkDBcompatibility(dbver):
 
     if dbver == VERSION:
