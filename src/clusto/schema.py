@@ -26,21 +26,11 @@ except:
 
 __all__ = ['ATTR_TABLE', 'Attribute', 'and_', 'ENTITY_TABLE', 'Entity', 'func',
            'METADATA', 'not_', 'or_', 'SESSION', 'select', 'VERSION',
-           'latest_version', 'CLUSTO_VERSIONING', 'Counter', 'ClustoVersioning',
-           'working_version', 'OperationalError', 'ClustoEmptyCommit']
+           'Counter', 'OperationalError', 'ClustoEmptyCommit']
 
 
 METADATA = MetaData()
 
-
-CLUSTO_VERSIONING = Table('clustoversioning', METADATA,
-                          Column('version', Integer, primary_key=True),
-                          Column('timestamp', TIMESTAMP, default=func.current_timestamp(), index=True),
-                          Column('user', String(64), default=None),
-                          Column('description', Text, default=None),
-                          mysql_engine='InnoDB'
-
-                          )
 
 class ClustoEmptyCommit(Exception):
     pass
@@ -48,13 +38,6 @@ class ClustoEmptyCommit(Exception):
 class ClustoSession(sqlalchemy.orm.interfaces.SessionExtension):
 
     def after_begin(self, session, transaction, connection):
-
-        sql = CLUSTO_VERSIONING.insert().values(user=SESSION.clusto_user,
-                                                description=SESSION.clusto_description)
-
-        session.execute(sql)
-
-        SESSION.clusto_description = None
         SESSION.flushed = set()
 
     def before_commit(self, session):
@@ -75,31 +58,15 @@ SESSION = scoped_session(sessionmaker(autoflush=True, autocommit=True,
                                       extension=ClustoSession()))
 
 
-def latest_version():
-    return select([func.coalesce(func.max(CLUSTO_VERSIONING.c.version), 0)])
-
-def working_version():
-    return select([func.coalesce(func.max(CLUSTO_VERSIONING.c.version),1)])
-
-SESSION.clusto_version = None
-SESSION.clusto_user = None
-SESSION.clusto_description = None
-
 ENTITY_TABLE = Table('entities', METADATA,
                      Column('entity_id', Integer, primary_key=True),
                      Column('name', String(128, convert_unicode=True),
                             nullable=False, ),
                      Column('type', String(32), nullable=False),
                      Column('driver', String(32), nullable=False),
-                     Column('version', Integer, nullable=False),
-                     Column('deleted_at_version', Integer, default=None),
                      mysql_engine='InnoDB'
                      )
 
-Index('idx_entity_name_version',
-      ENTITY_TABLE.c.name,
-      ENTITY_TABLE.c.version,
-      ENTITY_TABLE.c.deleted_at_version)
 
 ATTR_TABLE = Table('entity_attrs', METADATA,
                    Column('attr_id', Integer, primary_key=True),
@@ -119,15 +86,9 @@ ATTR_TABLE = Table('entity_attrs', METADATA,
                    Column('relation_id', Integer,
                           ForeignKey('entities.entity_id'), default=None),
 
-                   Column('version', Integer, nullable=False),
-                   Column('deleted_at_version', Integer, default=None),
                    mysql_engine='InnoDB'
 
                    )
-Index('idx_attrs_entity_version',
-      ATTR_TABLE.c.entity_id,
-      ATTR_TABLE.c.version,
-      ATTR_TABLE.c.deleted_at_version)
 
 Index('idx_attrs_key', ATTR_TABLE.c.key)
 Index('idx_attrs_subkey', ATTR_TABLE.c.subkey)
@@ -153,8 +114,6 @@ Index('idx_counter_entity_attr',
       COUNTER_TABLE.c.entity_id,
       COUNTER_TABLE.c.attr_key)
 
-class ClustoVersioning(object):
-    pass
 
 class Counter(object):
 
@@ -240,7 +199,6 @@ class Attribute(ProtectedObj):
             subkey = unicode(subkey)
             
         self.subkey = subkey
-        self.version = working_version()
         if isinstance(number, bool) and number == True:
             counter = Counter.get(entity, key, default=-1)
             self.number = counter.next()
@@ -273,7 +231,7 @@ class Attribute(ProtectedObj):
 
     def __repr__(self):
 
-        params = ('key','value','subkey','number','datatype','version', 'deleted_at_version')
+        params = ('key','value','subkey','number','datatype')
                   #'int_value','string_value','datetime_value','relation_id')
 
 
@@ -373,29 +331,13 @@ class Attribute(ProtectedObj):
 
     @ProtectedObj.writer
     def delete(self):
-        ### TODO this seems like a hack
+        SESSION.delete(self)
+        SESSION.flush()
 
-        self.deleted_at_version = working_version()
-
-    @classmethod
-    def _version_args(cls):
-        args = []
-        del_version_args = [cls.deleted_at_version==None]
-        if SESSION.clusto_version != None:
-          del_version_args.append(cls.deleted_at_version>SESSION.clusto_version)
-          args.append(cls.version<=SESSION.clusto_version)
-
-
-        if len(del_version_args) > 1:
-          args.append(or_(*del_version_args))
-        else:
-          args.append(*del_version_args)
-
-        return args
 
     @classmethod
     def queryarg(cls, key=None, value=(), subkey=(), number=()):
-        args = cls._version_args()
+        args = []
 
         if key:
             args.append(Attribute.key==unicode(key))
@@ -432,9 +374,7 @@ class Attribute(ProtectedObj):
 
     @classmethod
     def query(cls):
-        args = cls._version_args()
-
-        return SESSION.query(cls).filter(and_(*args))
+        return SESSION.query(cls)
 
 class Entity(ProtectedObj):
     """
@@ -461,7 +401,6 @@ class Entity(ProtectedObj):
         self.driver = driver
         self.type = clustotype
 
-        self.version = working_version()
         SESSION.add(self)
         SESSION.flush()
 
@@ -491,10 +430,10 @@ class Entity(ProtectedObj):
 
 
     def __repr__(self):
-        s = "%s(name=%s, driver=%s, clustotype=%s, version=%s, deleted_at_version=%s)"
+        s = "%s(name=%s, driver=%s, clustotype=%s)"
 
         return s % (self.__class__.__name__,
-                    self.name, self.driver, self.type, str(self.version), str(self.deleted_at_version))
+                    self.name, self.driver, self.type)
 
     def __str__(self):
         "Return string representing this entity"
@@ -520,33 +459,23 @@ class Entity(ProtectedObj):
 
         clusto.begin_transaction()
         try:
-            self.deleted_at_version = working_version()
-
             for i in self.references:
                 i.delete()
 
             for i in self.attrs:
                 i.delete()
 
+            SESSION.delete(self)
+            SESSION.flush()
             clusto.commit()
         except Exception, x:
             clusto.rollback_transaction()
             raise x
 
-    @classmethod
-    def _version_args(cls):
-        args = []
-        del_version_args = [cls.deleted_at_version==None]
-        if SESSION.clusto_version != None:
-          del_version_args.append(cls.deleted_at_version>SESSION.clusto_version)
-          args.append(cls.version<=SESSION.clusto_version)
-
-        args.append(or_(*del_version_args))
-        return args
 
     @classmethod
     def query(cls):
-        return SESSION.query(cls).filter(and_(*cls._version_args()))
+        return SESSION.query(cls)
 
 
     @ProtectedObj.writer
@@ -571,8 +500,6 @@ class Entity(ProtectedObj):
             clusto.rollback_transaction()
             raise x
 
-
-mapper(ClustoVersioning, CLUSTO_VERSIONING)
 
 mapper(Counter, COUNTER_TABLE,
        properties = {'entity': relation(Entity, lazy=True, uselist=False)},

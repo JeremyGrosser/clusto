@@ -13,8 +13,6 @@ class TestEntitySchema(testbase.ClustoTestBase):
 
     def testCreateEntityObject(self):
 
-        curver = clusto.get_latest_version_number()
-
         e1 = Entity('e1')
         e2 = Entity('e2')
 
@@ -41,6 +39,8 @@ class TestEntitySchema(testbase.ClustoTestBase):
         
 
     def testDeleteEntity(self):
+
+        self.assertEqual(Entity.query().filter_by(type='entity').count(), 0)
 
         e1 = Entity('e1')
 

@@ -18,7 +18,8 @@ class TestClustoPlain(testbase.ClustoTestBase):
         clusto.init_clusto()
         clusto.init_clusto()
 
-        self.assertEqual(SESSION.query(ClustoVersioning).count(), 2)
+        self.assertEqual(
+                SESSION.query(Entity).filter_by(name='clustometa').count(), 1)
 
 
 
@@ -355,19 +356,6 @@ class TestClusto(testbase.ClustoTestBase):
                          'generic')
 
         self.assertRaises(LookupError, clusto.get_type_name, 123)
-
-
-    def testAttributeOldVersionsInGetEntities(self):
-
-        sl = [BasicServer('s' + str(x)) for x in range(10)]
-        for n, s in enumerate(sl):
-            s.add_attr(key='old', value="val")
-            s.del_attrs(key='old')
-            s.add_attr(key='new', value='foo')
-
-        l=clusto.get_entities(attrs=[{'key':'old', 'value':'val'}])
-
-        self.assertEqual(l, [])
 
 
     def testSiblings(self):

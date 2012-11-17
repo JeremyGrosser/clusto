@@ -67,7 +67,6 @@ class ConcurrentTest(testbase.unittest.TestCase):
         conf.add_section('clusto')
         conf.set('clusto', 'dsn', testbase.DB)
 
-        clusto.SESSION.clusto_version = clusto.working_version()
         clusto.connect(conf,echo=testbase.ECHO)
         clusto.METADATA.drop_all(clusto.SESSION.bind)
         clusto.clear()
@@ -94,7 +93,6 @@ class ConcurrentTest(testbase.unittest.TestCase):
         conf.set('clusto', 'dsn', testbase.DB)
         clusto.connect(conf, echo=testbase.ECHO)
         clusto.init_clusto()
-        firstver = clusto.get_latest_version_number()
         
         threadcount = 5
         threads = []
@@ -108,9 +106,3 @@ class ConcurrentTest(testbase.unittest.TestCase):
 
         for i in threads:
             i.join()
-
-        self.assertEqual(clusto.get_latest_version_number(),
-                         threadcount+firstver)        
-
-
-        
