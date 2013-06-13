@@ -107,3 +107,9 @@ class UniquePool(Pool):
                                 (thing, pools))
 
         Pool.insert(self, thing)
+
+class Environment(UniquePool):
+    _driver_name = "environment"
+
+class Role(UniquePool):
+    _driver_name = "role"
