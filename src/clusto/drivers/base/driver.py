@@ -421,12 +421,13 @@ class Driver(object):
     def _itemize_attrs(self, attrlist):
         return [(x.keytuple, x.value) for x in attrlist]
 
-    def attrs(self, *args, merge_container_attrs=False, **kwargs):
+    def attrs(self, *args, **kwargs):
         """Return attributes for this entity.
 
         (filters whole attribute list as opposed to querying the db directly)
         """
 
+        merge_container_attrs = kwargs.pop('merge_container_attrs', False)
         attrs = self.attr_filter(self.entity.attrs, *args, **kwargs)
 
         if merge_container_attrs:
@@ -546,7 +547,6 @@ class Driver(object):
             subkey = None
 
 
-        self.expire(key=key)
         return self.entity.add_attr(key, value, subkey=subkey, number=number)
 
 
@@ -559,7 +559,6 @@ class Driver(object):
             for i in self.attr_query(*args, **kwargs):
                 i.delete()
             clusto.commit()
-            self.expire(*args, **kwargs)
         except Exception, x:
             clusto.rollback_transaction()
             raise x
@@ -584,33 +583,6 @@ class Driver(object):
 
         return attr
 
-
-    def expire(self, *args, **kwargs):
-        """Expires the memcache value (if using memcache) of this object"""
-
-        key = None
-        if 'key' in kwargs:
-            key = kwargs['key']
-        subkey = None
-        if 'subkey' in kwargs:
-            subkey = kwargs['subkey']
-        if clusto.SESSION.memcache:
-            attrs = self.attrs(key=key, subkey=subkey)
-            memcache_keys = []
-            for attr in attrs:
-                mk = self.name
-                mk += '.%s' % attr.key
-                if subkey is None:
-                    memcache_keys.append(str(mk))
-                if attr.subkey:
-                    mk += '.%s' % attr.subkey
-                memcache_keys.append(str(mk)) 
-            memcache_keys = set(memcache_keys)
-            for mk in memcache_keys:
-                logging.debug('Expiring %s' % mk)
-                clusto.SESSION.memcache.delete(mk)
-        else:
-            logging.info('Not using memcache, not expiring anything.')
 
     def has_attr(self, *args, **kwargs):
         """return True if this list has an attribute with the given key"""
