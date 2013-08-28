@@ -421,49 +421,18 @@ class Driver(object):
     def _itemize_attrs(self, attrlist):
         return [(x.keytuple, x.value) for x in attrlist]
 
-    def attrs(self, *args, **kwargs):
+    def attrs(self, *args, merge_container_attrs=False, **kwargs):
         """Return attributes for this entity.
 
         (filters whole attribute list as opposed to querying the db directly)
         """
 
-        merge_container_attrs = kwargs.pop('merge_container_attrs', False)
-        ignore_memcache = kwargs.pop('ignore_memcache', False)
-
-        if clusto.SESSION.memcache and not ignore_memcache:
-            logging.debug('Pulling info from memcache when possible for %s' % self.name)
-            k = None
-            if 'key' in kwargs:
-                k = kwargs['key']
-            else:
-                if len(args) > 1:
-                    k = args[0]
-            if k:
-#               This is hackish, need to find another way to know if we should cache things or not
-                if not k.startswith('_'):
-                    if 'subkey' in kwargs and kwargs['subkey'] is not None:
-                        memcache_key = str('%s.%s.%s' % (self.name, k, kwargs['subkey']))
-                    else:
-                        memcache_key = str('%s.%s' % (self.name, k))
-                    logging.debug('memcache key: %s' % memcache_key)
-                    attrs = clusto.SESSION.memcache.get(memcache_key)
-                    if not attrs:
-                        attrs = self.attr_filter(self.entity.attrs, *args, **kwargs)
-                        if attrs:
-                            clusto.SESSION.memcache.set(memcache_key, attrs)
-                else:
-                    attrs = self.attr_filter(self.entity.attrs, *args, **kwargs)
-            else:
-                logging.debug('We cannot cache attrs without a key at least')
-                attrs = self.attr_filter(self.entity.attrs, *args, **kwargs)
-        else:
-            attrs = self.attr_filter(self.entity.attrs, *args, **kwargs)
+        attrs = self.attr_filter(self.entity.attrs, *args, **kwargs)
 
         if merge_container_attrs:
             kwargs['merge_container_attrs'] = merge_container_attrs
-            kwargs['ignore_memcache'] = ignore_memcache
             for parent in self.parents():
-                for a in parent.attrs(*args,  **kwargs):
+                for a in parent.attrs(*args, **kwargs):
                     if a not in attrs:
                         attrs.append(a)
 

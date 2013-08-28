@@ -261,7 +261,7 @@ class Attribute(ProtectedObj):
                 self.entity.name, self.key, self.subkey, self.value, self.number, self.datatype)
         SESSION.add(self)
         SESSION.flush()
-
+        self.entity.cache_invalidate()
 
 
     def __cmp__(self, other):
@@ -375,8 +375,9 @@ class Attribute(ProtectedObj):
         
         if value_type == 'string_value' and value is not None:
             value = unicode(value)
-        
+
         setattr(self, value_type, value)
+        self.entity.cache_invalidate()
 
         audit_log.info('set attribute entity=%s key=%s subkey=%s value=%s number=%s datatype=%s',
                 self.entity.name, self.key, self.subkey, self.value, self.number, self.datatype)
@@ -389,6 +390,7 @@ class Attribute(ProtectedObj):
         audit_log.info('delete attribute entity=%s key=%s subkey=%s value=%s number=%s datatype=%s',
                 self.entity.name, self.key, self.subkey, self.value, self.number, self.datatype)
         self.deleted_at_version = working_version()
+        self.entity.cache_invalidate()
 
     @classmethod
     def _version_args(cls):
@@ -480,6 +482,7 @@ class Entity(ProtectedObj):
 
         SESSION.add(self)
         SESSION.flush()
+        self.cache_invalidate()
 
     def __eq__(self, otherentity):
         """Am I the same as the Other Entity.
@@ -516,10 +519,28 @@ class Entity(ProtectedObj):
         "Return string representing this entity"
 
         return str(self.name)
+    
+    @property
+    def cache_key(self):
+        return 'entity_attrs:%s' % self.id
+
+    def cache_invalidate(self):
+        if SESSION.memcache:
+            SESSION.memcache.delete(self.cache_key)
 
     @property
     def attrs(self):
-        return Attribute.query().filter(Attribute.entity==self).all()
+        if SESSION.memcache:
+            attrs = SESSION.memcache.get(self.cache_key)
+            if attrs:
+                return attrs
+
+        attrs = Attribute.query().filter(Attribute.entity==self).all()
+
+        if SESSION.memcache:
+            SESSION.memcache.set(self.cache_key, attrs)
+
+        return attrs
 
     @property
     def references(self):
@@ -527,7 +548,7 @@ class Entity(ProtectedObj):
 
 
     def add_attr(self, *args, **kwargs):
-
+        self.cache_invalidate()
         return Attribute(self, *args, **kwargs)
 
     @ProtectedObj.writer
@@ -546,6 +567,7 @@ class Entity(ProtectedObj):
 
             clusto.commit()
             audit_log.info('delete entity %s', self.name)
+            self.cache_invalidate()
         except Exception, x:
             clusto.rollback_transaction()
             raise x
