@@ -229,7 +229,7 @@ class Driver(object):
 
     @classmethod
     def do_attr_query(cls, key=(), value=(), number=(), start_timestamp=(), end_timestamp=(),
-                    subkey=(), ignore_hidden=True, sort_by_keys=False,
+                    subkey=(), ignore_hidden=True, sort_by_keys=False, regex=False,
                     glob=False, count=False, querybase=None, return_query=False,
                     entity=None):
         """Does queries against all Attributes using the DB."""
@@ -258,8 +258,11 @@ class Driver(object):
         
             if glob:
                 query = query.filter(Attribute.key.like(key.replace('*', '%')))
+            elif regex:
+                query = query.filter(Attribute.key.op('regexp')(key))
             else:
                 query = query.filter_by(key=key)
+
 
         if subkey is not ():
             if subkey is not None:
@@ -267,6 +270,8 @@ class Driver(object):
         
             if glob and subkey:
                 query = query.filter(Attribute.subkey.like(subkey.replace('*', '%')))
+            elif regex:
+                query = query.filter(Attribute.subkey.op('regexp')(subkey))
             else:
                 query = query.filter_by(subkey=subkey)
 
@@ -428,40 +433,22 @@ class Driver(object):
         """
 
         merge_container_attrs = kwargs.pop('merge_container_attrs', False)
-        ignore_memcache = kwargs.pop('ignore_memcache', False)
+        clusto_drivers = kwargs.pop('clusto_drivers', None)
+        clusto_types = kwargs.pop('clusto_types', None)
 
-        if clusto.SESSION.memcache and not ignore_memcache:
-            logging.debug('Pulling info from memcache when possible for %s' % self.name)
-            k = None
-            if 'key' in kwargs:
-                k = kwargs['key']
-            else:
-                if len(args) > 1:
-                    k = args[0]
-            if k:
-#               This is hackish, need to find another way to know if we should cache things or not
-                if not k.startswith('_'):
-                    if 'subkey' in kwargs and kwargs['subkey'] is not None:
-                        memcache_key = str('%s.%s.%s' % (self.name, k, kwargs['subkey']))
-                    else:
-                        memcache_key = str('%s.%s' % (self.name, k))
-                    logging.debug('memcache key: %s' % memcache_key)
-                    attrs = clusto.SESSION.memcache.get(memcache_key)
-                    if not attrs:
-                        attrs = self.attr_filter(self.entity.attrs, *args, **kwargs)
-                        if attrs:
-                            clusto.SESSION.memcache.set(memcache_key, attrs)
-                else:
-                    attrs = self.attr_filter(self.entity.attrs, *args, **kwargs)
-            else:
-                logging.debug('We cannot cache attrs without a key at least')
-                attrs = self.attr_filter(self.entity.attrs, *args, **kwargs)
-        else:
-            attrs = self.attr_filter(self.entity.attrs, *args, **kwargs)
+        kwargs['entity'] = self.entity
+        attrs = self.do_attr_query(*args, **kwargs)
 
+        if clusto_drivers:
+            cdl = [clusto.get_driver_name(n) for n in clusto_drivers]
+            attrs = (attr for attr in attrs if attr.is_relation and attr.value.entity.driver in cdl)
+
+        if clusto_types:
+            ctl = [clusto.get_type_name(n) for n in clusto_types]
+            attrs = (attr for attr in attrs if attr.is_relation and attr.value.entity.type in ctl)
+        
         if merge_container_attrs:
             kwargs['merge_container_attrs'] = merge_container_attrs
-            kwargs['ignore_memcache'] = ignore_memcache
             for parent in self.parents():
                 for a in parent.attrs(*args,  **kwargs):
                     if a not in attrs:
