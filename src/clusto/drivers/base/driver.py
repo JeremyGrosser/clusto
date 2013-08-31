@@ -564,7 +564,7 @@ class Driver(object):
             subkey = None
 
 
-        self.expire(key=key)
+        #self.expire(key=key)
         return self.entity.add_attr(key, value, subkey=subkey, number=number)
 
 
@@ -577,7 +577,7 @@ class Driver(object):
             for i in self.attr_query(*args, **kwargs):
                 i.delete()
             clusto.commit()
-            self.expire(*args, **kwargs)
+            #self.expire(*args, **kwargs)
         except Exception, x:
             clusto.rollback_transaction()
             raise x
@@ -628,7 +628,7 @@ class Driver(object):
                 logging.debug('Expiring %s' % mk)
                 clusto.SESSION.memcache.delete(mk)
         else:
-            logging.info('Not using memcache, not expiring anything.')
+            logging.debug('Not using memcache, not expiring anything.')
 
     def has_attr(self, *args, **kwargs):
         """return True if this list has an attribute with the given key"""

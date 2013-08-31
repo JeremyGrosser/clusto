@@ -50,14 +50,9 @@ audit_log = logging.getLogger('clusto.audit')
 class ClustoEmptyCommit(Exception):
     pass
 
-def regex_fn(expr, item):
-    return re.search(expr, item, re.IGNORECASE) is not None
-
 class ClustoSession(sqlalchemy.orm.interfaces.SessionExtension):
 
     def after_begin(self, session, transaction, connection):
-        connection.connection.create_function('regexp', 2, regex_fn)
-
         if SESSION.clusto_versioning_enabled:
             sql = CLUSTO_VERSIONING.insert().values(user=SESSION.clusto_user,
                                                     description=SESSION.clusto_description)
