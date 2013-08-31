@@ -17,6 +17,8 @@ import re
 driverlist = DRIVERLIST
 typelist = TYPELIST
 
+log = logging.getLogger('clusto.init')
+
 def connect(config, echo=False):
     """Connect to a given Clusto datastore.
 
@@ -51,14 +53,16 @@ def connect(config, echo=False):
     if config.has_option('clusto', 'logconfig'):
         logging.config.fileConfig(config.get('clusto', 'logconfig'))
 
-    try:
-        memcache_servers = config.get('clusto', 'memcached').split(',')
-#       Memcache should only be imported if we're actually using it, yes?
-        import memcache
-        logging.info('Memcache server list: %s' % config.get('clusto', 'memcached'))
-        SESSION.memcache = memcache.Client(memcache_servers, debug=0)
-    except:
-        SESSION.memcache = None
+    if config.has_option('clusto', 'memcached'):
+        try:
+            memcache_servers = config.get('clusto', 'memcached').split(',')
+            # Memcache should only be imported if we're actually using it, yes?
+            import memcache
+            log.info('Using memcached servers: %s' % config.get('clusto', 'memcached'))
+            SESSION.memcache = memcache.Client(memcache_servers, debug=0)
+        except Exception:
+            log.exception('Unable to initialize memcached client')
+            SESSION.memcache = None
 
 
 def checkDBcompatibility(dbver):
@@ -262,7 +266,6 @@ def get_or_create(name, driver, **kwargs):
         obj = get_by_name(name)
     except LookupError:
         obj = driver(name, **kwargs)
-        logging.info('Created %s' % obj)
     return obj
 
 def get_by_mac(mac):

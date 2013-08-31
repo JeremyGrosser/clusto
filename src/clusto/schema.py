@@ -522,7 +522,7 @@ class Entity(ProtectedObj):
     
     @property
     def cache_key(self):
-        return 'entity_attrs:%s' % self.id
+        return str('entity_attrs:%s' % self.name)
 
     def cache_invalidate(self):
         if SESSION.memcache:

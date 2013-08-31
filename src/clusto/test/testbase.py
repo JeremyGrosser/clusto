@@ -36,6 +36,7 @@ class ClustoTestBase(unittest.TestCase):
         conf = ConfigParser.ConfigParser()
         conf.add_section('clusto')
         conf.set('clusto', 'dsn', DB)
+        conf.set('clusto', 'memcached', '127.0.0.1:11211')
         clusto.connect(conf,echo=ECHO)
         clusto.clear()
         clusto.SESSION.close()
