@@ -163,8 +163,6 @@ Index('idx_counter_entity_attr',
       COUNTER_TABLE.c.entity_id,
       COUNTER_TABLE.c.attr_key)
 
-
-
 class ClustoVersioning(object):
     pass
 
